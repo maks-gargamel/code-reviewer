@@ -1,0 +1,18 @@
+{
+  "name": "ignored_error_go",
+  "description": "Ошибка записи в store игнорируется",
+  "files": {
+    "svc/save.go": "package svc\n\nfunc Save(store Store, value string) error {\n\tif err := store.Put(value); err != nil {\n\t\treturn err\n\t}\n\treturn nil\n}\n"
+  },
+  "changes": {
+    "svc/save.go": "package svc\n\nfunc Save(store Store, value string) error {\n\tstore.Put(value)\n\treturn nil\n}\n"
+  },
+  "expected": [
+    {
+      "file": "svc/save.go",
+      "line": 4,
+      "category": "error-handling",
+      "severity": "warning"
+    }
+  ]
+}

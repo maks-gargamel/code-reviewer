@@ -1,0 +1,18 @@
+{
+  "name": "mutable_default",
+  "description": "Изменяемое значение по умолчанию разделяется между вызовами",
+  "files": {
+    "app.py": "def add_item(item, bucket=None):\n    if bucket is None:\n        bucket = []\n    bucket.append(item)\n    return bucket\n"
+  },
+  "changes": {
+    "app.py": "def add_item(item, bucket=[]):\n    bucket.append(item)\n    return bucket\n"
+  },
+  "expected": [
+    {
+      "file": "app.py",
+      "line": 1,
+      "category": "bug",
+      "severity": "warning"
+    }
+  ]
+}

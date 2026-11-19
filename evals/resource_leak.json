@@ -1,0 +1,18 @@
+{
+  "name": "resource_leak",
+  "description": "Файл открыт без with — дескриптор утечёт при исключении",
+  "files": {
+    "app.py": "def read_config(path):\n    return 'default'\n"
+  },
+  "changes": {
+    "app.py": "def read_config(path):\n    handle = open(path)\n    return handle.read()\n"
+  },
+  "expected": [
+    {
+      "file": "app.py",
+      "line": 2,
+      "category": "resource",
+      "severity": "warning"
+    }
+  ]
+}

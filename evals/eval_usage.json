@@ -1,0 +1,18 @@
+{
+  "name": "eval_usage",
+  "description": "eval() на пользовательском вводе",
+  "files": {
+    "parse.py": "def parse_number(value):\n    return int(value)\n"
+  },
+  "changes": {
+    "parse.py": "def parse_number(value):\n    return eval(value)\n"
+  },
+  "expected": [
+    {
+      "file": "parse.py",
+      "line": 2,
+      "category": "security",
+      "severity": "error"
+    }
+  ]
+}

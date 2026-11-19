@@ -1,0 +1,18 @@
+{
+  "name": "go_defer_in_loop",
+  "description": "defer в цикле копит отложенные вызовы до выхода из функции",
+  "files": {
+    "files.go": "package main\n\nimport \"os\"\n\nfunc closeAll(files []*os.File) {\n    for _, file := range files {\n        file.Close()\n    }\n}\n"
+  },
+  "changes": {
+    "files.go": "package main\n\nimport \"os\"\n\nfunc closeAll(files []*os.File) {\n    for _, file := range files {\n        defer file.Close()\n    }\n}\n"
+  },
+  "expected": [
+    {
+      "file": "files.go",
+      "line": 7,
+      "category": "resource",
+      "severity": "warning"
+    }
+  ]
+}

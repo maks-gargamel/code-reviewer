@@ -1,0 +1,18 @@
+{
+  "name": "sql_injection",
+  "description": "Конкатенация пользовательского ввода в SQL-запрос",
+  "files": {
+    "db.py": "def find_user(cursor, name):\n    cursor.execute(\"SELECT * FROM users WHERE name = %s\", [name])\n    return cursor.fetchall()\n"
+  },
+  "changes": {
+    "db.py": "def find_user(cursor, name):\n    query = f\"SELECT * FROM users WHERE name = '{name}'\"\n    cursor.execute(query)\n    return cursor.fetchall()\n"
+  },
+  "expected": [
+    {
+      "file": "db.py",
+      "line": 2,
+      "category": "security",
+      "severity": "error"
+    }
+  ]
+}

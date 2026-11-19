@@ -1,0 +1,18 @@
+{
+  "name": "swallowed_exception",
+  "description": "Широкий except скрывает ошибки БД и возвращает None",
+  "files": {
+    "app.py": "\"\"\"Пользователи.\"\"\"\n\n\ndef load_user(db, user_id):\n    return db.get(user_id)\n"
+  },
+  "changes": {
+    "app.py": "\"\"\"Пользователи.\"\"\"\n\n\ndef load_user(db, user_id):\n    try:\n        return db.get(user_id)\n    except Exception:\n        return None\n"
+  },
+  "expected": [
+    {
+      "file": "app.py",
+      "line": 7,
+      "category": "error-handling",
+      "severity": "warning"
+    }
+  ]
+}

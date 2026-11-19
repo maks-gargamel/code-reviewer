@@ -1,0 +1,18 @@
+{
+  "name": "missing_return_js",
+  "description": "Ветка функции не возвращает значение — вернётся undefined",
+  "files": {
+    "src/classify.js": "export function classify(value) {\n  if (value > 0) {\n    return \"positive\";\n  }\n  return \"other\";\n}\n"
+  },
+  "changes": {
+    "src/classify.js": "export function classify(value) {\n  if (value > 0) {\n    return \"positive\";\n  }\n  if (value < 0) {\n    console.log(\"negative\");\n  }\n}\n"
+  },
+  "expected": [
+    {
+      "file": "src/classify.js",
+      "line": 6,
+      "category": "logic",
+      "severity": "warning"
+    }
+  ]
+}

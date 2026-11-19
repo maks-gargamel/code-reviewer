@@ -1,0 +1,18 @@
+{
+  "name": "dict_keyerror",
+  "description": "Обращение по ключу без проверки может дать KeyError",
+  "files": {
+    "user.py": "def get_name(user):\n    return user.get(\"name\", \"\")\n"
+  },
+  "changes": {
+    "user.py": "def get_name(user):\n    return user[\"name\"]\n"
+  },
+  "expected": [
+    {
+      "file": "user.py",
+      "line": 2,
+      "category": "logic",
+      "severity": "warning"
+    }
+  ]
+}

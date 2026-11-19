@@ -1,0 +1,18 @@
+{
+  "name": "mutation_of_argument",
+  "description": "Функция мутирует список вызывающего кода",
+  "files": {
+    "app.py": "def normalize(items):\n    return [item.strip() for item in items]\n"
+  },
+  "changes": {
+    "app.py": "def normalize(items):\n    for index, item in enumerate(items):\n        items[index] = item.strip()\n    return items\n"
+  },
+  "expected": [
+    {
+      "file": "app.py",
+      "line": 3,
+      "category": "api-contract",
+      "severity": "warning"
+    }
+  ]
+}

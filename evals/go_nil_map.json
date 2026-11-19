@@ -1,0 +1,18 @@
+{
+  "name": "go_nil_map",
+  "description": "Запись в nil map вызывает panic",
+  "files": {
+    "cache.go": "package main\n\nfunc add(cache map[string]int, key string) {\n    cache[key] = 1\n}\n"
+  },
+  "changes": {
+    "cache.go": "package main\n\nfunc add(cache map[string]int, key string) {\n    var cache map[string]int\n    cache[key] = 1\n}\n"
+  },
+  "expected": [
+    {
+      "file": "cache.go",
+      "line": 5,
+      "category": "logic",
+      "severity": "error"
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "name": "none_deref",
+  "description": "После .get() значение может быть None, обращение по ключу упадёт",
+  "files": {
+    "app.py": "def user_name(payload):\n    user = payload[\"user\"]\n    return user[\"name\"]\n"
+  },
+  "changes": {
+    "app.py": "def user_name(payload):\n    user = payload.get(\"user\")\n    return user[\"name\"]\n"
+  },
+  "expected": [
+    {
+      "file": "app.py",
+      "line": 3,
+      "category": "bug",
+      "severity": "error"
+    }
+  ]
+}

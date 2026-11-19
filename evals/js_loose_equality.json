@@ -1,0 +1,18 @@
+{
+  "name": "js_loose_equality",
+  "description": "Нестрогое сравнение == вместо ===",
+  "files": {
+    "src/check.js": "export function isZero(value) {\n  return value === 0;\n}\n"
+  },
+  "changes": {
+    "src/check.js": "export function isZero(value) {\n  return value == 0;\n}\n"
+  },
+  "expected": [
+    {
+      "file": "src/check.js",
+      "line": 2,
+      "category": "logic",
+      "severity": "warning"
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "name": "float_equality",
+  "description": "Сравнение чисел с плавающей точкой через ==",
+  "files": {
+    "price.py": "def is_sale(price):\n    return abs(price - 19.99) < 0.001\n"
+  },
+  "changes": {
+    "price.py": "def is_sale(price):\n    return price == 19.99\n"
+  },
+  "expected": [
+    {
+      "file": "price.py",
+      "line": 2,
+      "category": "logic",
+      "severity": "warning"
+    }
+  ]
+}

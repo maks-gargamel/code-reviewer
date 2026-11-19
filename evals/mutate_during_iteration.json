@@ -1,0 +1,18 @@
+{
+  "name": "mutate_during_iteration",
+  "description": "Удаление элементов из списка во время обхода пропускает элементы",
+  "files": {
+    "app.py": "def remove_all(items, target):\n    return [item for item in items if item != target]\n"
+  },
+  "changes": {
+    "app.py": "def remove_all(items, target):\n    for item in items:\n        if item == target:\n            items.remove(item)\n    return items\n"
+  },
+  "expected": [
+    {
+      "file": "app.py",
+      "line": 4,
+      "category": "bug",
+      "severity": "warning"
+    }
+  ]
+}
