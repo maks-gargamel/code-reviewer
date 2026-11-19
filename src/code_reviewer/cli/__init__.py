@@ -1,0 +1,7 @@
+"""Слой командной строки Typer."""
+
+from __future__ import annotations
+
+from .app import app, run
+
+__all__ = ["app", "run"]
