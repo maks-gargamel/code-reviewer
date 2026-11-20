@@ -14,8 +14,18 @@ HOOK_NAME = "pre-commit"
 MARKER = "# code-reviewer-hook"
 
 
-def render_hook_script(python_executable: str | None = None) -> str:
-    py = shlex.quote(python_executable or sys.executable)
+def render_hook_script(
+    python_executable: str | None = None,
+    *,
+    frozen: bool | None = None,
+) -> str:
+    is_frozen = bool(getattr(sys, "frozen", False)) if frozen is None else frozen
+    target = shlex.quote(python_executable or sys.executable)
+    fallback_cmd = (
+        f'exec {target} check --quiet "$@"'
+        if is_frozen
+        else f'exec {target} -m code_reviewer check --quiet "$@"'
+    )
     return (
         "#!/bin/sh\n"
         f"{MARKER}\n"
@@ -24,7 +34,7 @@ def render_hook_script(python_executable: str | None = None) -> str:
         "if command -v code-reviewer >/dev/null 2>&1; then\n"
         '  exec code-reviewer check --quiet "$@"\n'
         "fi\n"
-        f'exec {py} -m code_reviewer check --quiet "$@"\n'
+        f"{fallback_cmd}\n"
     )
 
 

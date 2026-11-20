@@ -258,3 +258,14 @@ def test_install_hook_with_mocked_git_hooks_dir(project: Path, monkeypatch):
     removed = runner.invoke(app, ["install-hook", "--uninstall"])
     assert removed.exit_code == 0
     assert not hook.exists()
+
+
+def test_render_hook_script_handles_python_and_frozen_binary():
+    from code_reviewer.vcs.hooks import render_hook_script
+
+    py_script = render_hook_script("/opt/venv/bin/python", frozen=False)
+    assert 'exec /opt/venv/bin/python -m code_reviewer check --quiet "$@"' in py_script
+
+    bin_script = render_hook_script("/usr/local/bin/code-reviewer", frozen=True)
+    assert 'exec /usr/local/bin/code-reviewer check --quiet "$@"' in bin_script
+    assert "-m code_reviewer" not in bin_script

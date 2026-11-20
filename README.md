@@ -26,25 +26,53 @@
 
 ## Установка
 
-Требуется **Python 3.12+** (проект разрабатывается под **Python 3.14** через [`uv`](https://docs.astral.sh/uv/)).
+Доступны две равнозначные CLI-команды: `code-reviewer` и короткий алиас `cr`.
 
-### Через `uv` (рекомендуется)
+### Готовый автономный бинарник (без Python)
+
+**Linux / macOS** (установка в `/usr/local/bin`):
 
 ```bash
-uv sync --all-extras          # полная установка (с tree-sitter, pytest, ruff, mypy)
+curl -fsSL https://raw.githubusercontent.com/maks-gargamel/code-reviewer/main/install.sh | sh
+```
+
+Удаление: `curl -fsSL https://raw.githubusercontent.com/maks-gargamel/code-reviewer/main/install.sh | sh -s -- --uninstall`.
+
+**Windows (PowerShell):**
+
+```powershell
+irm https://raw.githubusercontent.com/maks-gargamel/code-reviewer/main/install.ps1 | iex
+```
+
+Готовые файлы для Linux (`x86_64`), macOS (`arm64`) и Windows (`x86_64`) публикуются в [GitHub Releases](https://github.com/maks-gargamel/code-reviewer/releases).
+
+### Локальная сборка бинарника
+
+На Linux предварительно установите `binutils` (`sudo apt install -y binutils`).
+
+```bash
+uv sync --all-extras
+uv run python scripts/build_binary.py --checksum
+./install.sh --local dist/code-reviewer
+```
+
+### Установка для разработки (Python 3.12+ / целевой 3.14)
+
+**Через `uv`:**
+
+```bash
+uv sync --all-extras          # полная установка (tree-sitter, pytest, ruff, mypy, pyinstaller)
 # или только базовый вариант (Python + Tier D):
 uv sync
 ```
 
-### Через `pip`
+**Через `pip`:**
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -e ".[treesitter]"
 ```
-
-Доступны две равнозначные CLI-команды: `code-reviewer` и короткий алиас `cr`.
 
 ## Быстрый старт
 
