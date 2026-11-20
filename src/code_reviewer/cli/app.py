@@ -12,6 +12,7 @@ from ..render.console import _s, err_console
 from .check_cmd import check_command, mark_reviewed_command
 from .eval_cmd import demo_command, eval_command
 from .init_cmd import init_command, status_command
+from .keys_cmd import keys_app
 from .map_cmd import map_app
 from .ops_cmd import (
     cache_command,
@@ -65,6 +66,7 @@ app.command("doctor")(doctor_command)
 
 app.add_typer(map_app, name="map")
 app.add_typer(config_app, name="config")
+app.add_typer(keys_app, name="keys")
 
 
 def run() -> None:

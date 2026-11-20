@@ -152,7 +152,7 @@ def run_checks(root: Path) -> list[Check]:
                     Check("Ключ API", OK, f"{len(keys)} шт.: " + " + ".join(sources))
                 )
             else:
-                detail = f"нет ключей: {config.llm.api_key_env}"
+                detail = f"нет ключей: добавьте через `keys add`, {config.llm.api_key_env}"
                 if key_file is not None:
                     detail += f" или {key_file}"
                 checks.append(Check("Ключ API", WARN, detail))

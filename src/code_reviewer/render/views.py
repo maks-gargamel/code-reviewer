@@ -11,6 +11,7 @@ from rich.syntax import Syntax
 from rich.table import Table
 
 from ..core.config import Config
+from ..llm.keys import StoredKeyEntry
 from ..review.history import HistoryEntry, Metrics
 from .console import _s, console, human_duration, human_size
 from .report import print_findings
@@ -198,3 +199,78 @@ def print_config(config: Config, *, sources: list[Path]) -> None:
     console.print(f"[bold]Источники:[/bold] {_s(sources_label)}")
     console.print(Syntax(json.dumps(config.model_dump(), ensure_ascii=False, indent=2), "json"))
     console.print()
+
+
+def print_keys(
+    entries: list[StoredKeyEntry],
+    *,
+    key_file: Path | None,
+    env_name: str,
+    total_unique: int,
+    is_local: bool = False,
+) -> None:
+    if not entries:
+        console.print("[yellow]Ключи API не настроены.[/yellow]")
+        if is_local:
+            console.print(
+                "[dim]Используется локальный провайдер — ключ API не обязателен.[/dim]"
+            )
+        console.print("[dim]Добавьте ключ: code-reviewer keys add[/dim]")
+        if key_file is not None:
+            console.print(f"[dim]Файл ключей: {_s(key_file)}[/dim]")
+        if env_name:
+            console.print(f"[dim]Переменная окружения: {_s(env_name)}[/dim]")
+        return
+
+    table = Table(title="Ключи API", header_style="bold")
+    table.add_column("#", justify="right", no_wrap=True)
+    table.add_column("Ключ", no_wrap=True)
+    table.add_column("Комментарий", overflow="fold")
+    table.add_column("Источник", overflow="fold")
+
+    for entry in entries:
+        idx_label = str(entry.index) if entry.index is not None else "—"
+        if entry.source == "file" and key_file is not None:
+            source_label = str(key_file)
+        else:
+            source_label = env_name or entry.source
+        table.add_row(
+            idx_label,
+            _s(entry.masked),
+            _s(entry.comment) or "—",
+            _s(source_label),
+        )
+
+    console.print()
+    console.print(table)
+    console.print(f"[bold]Активных уникальных ключей:[/bold] {total_unique}")
+    if is_local:
+        console.print("[dim]Используется локальный провайдер — ключ API не обязателен.[/dim]")
+    console.print()
+
+
+def keys_json(
+    entries: list[StoredKeyEntry],
+    *,
+    key_file: Path | None,
+    env_name: str,
+    total_unique: int,
+) -> str:
+    return json.dumps(
+        {
+            "key_file": str(key_file) if key_file is not None else None,
+            "env": env_name or None,
+            "total_unique": total_unique,
+            "keys": [
+                {
+                    "index": entry.index,
+                    "masked": entry.masked,
+                    "comment": entry.comment,
+                    "source": entry.source,
+                }
+                for entry in entries
+            ],
+        },
+        ensure_ascii=False,
+        indent=2,
+    )

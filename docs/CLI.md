@@ -59,6 +59,19 @@ code-reviewer eval [--root DIR] [--cases DIR] [--tolerance N] [--max-cases N] [-
 - `demo` запускает пайплайн на встроенном примере с SQL-инъекцией и записанным ответом (без ключа, сети и `git`).
 - `eval` прогоняет кейсы из `./evals` (или `--cases`) и считает micro-average `precision`, `recall`, `F1`.
 
+### `keys` — управление API-ключами
+
+```bash
+code-reviewer keys add [KEY] [-c|--comment TEXT] [--stdin] [--root DIR]
+code-reviewer keys list [--root DIR] [--json]
+code-reviewer keys remove INDEX [--root DIR]
+code-reviewer keys clear [--root DIR]
+```
+
+- `keys add` без аргумента запрашивает ключ скрытым вводом (не остаётся в истории shell); флаг `--stdin` читает ключ из стандартного ввода.
+- Файл `.code-reviewer/keys.txt` записывается атомарно с правами `0600`, а `.code-reviewer/` при необходимости добавляется в `.gitignore`.
+- `keys list` и `keys list --json` отображают ключи только в маскированном виде (исходные значения никогда не печатаются).
+
 ### Обслуживание, конфиг и CI
 
 ```bash

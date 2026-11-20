@@ -2,12 +2,38 @@
 
 from __future__ import annotations
 
+import contextlib
 import os
+import stat
 import threading
+from dataclasses import dataclass
 from pathlib import Path
 
 from ..core.config import Config
-from ..core.errors import LLMError
+from ..core.errors import LLMError, UsageAppError
+from ..core.fs import atomic_write_text
+
+KEYS_FILE_HEADER = "# Ключи API (по одному на строку; строки с # игнорируются)"
+
+
+@dataclass(slots=True)
+class StoredKeyEntry:
+    """Маскированная запись API-ключа для отображения пользователю."""
+
+    index: int | None
+    masked: str
+    comment: str = ""
+    source: str = "file"
+
+
+def mask_key(key: str) -> str:
+    """Вернуть безопасное маскированное представление API-ключа."""
+    cleaned = key.strip()
+    if len(cleaned) <= 8:
+        return "****"
+    if len(cleaned) <= 12:
+        return f"{cleaned[:2]}…{cleaned[-2:]}"
+    return f"{cleaned[:4]}…{cleaned[-4:]}"
 
 
 def resolve_api_key_file(value: str, root: Path | None = None) -> Path | None:
@@ -21,25 +47,167 @@ def resolve_api_key_file(value: str, root: Path | None = None) -> Path | None:
     return path
 
 
-def read_api_keys(path: Path) -> list[str]:
-    """Прочитать ключи из файла: по одному на строку, `#` — комментарий."""
+def _parse_key_line(raw: str) -> tuple[str, str] | None:
+    line = raw.strip()
+    if not line or line.startswith("#"):
+        return None
+    comment = ""
+    if " #" in line:
+        key_part, comment_part = line.split(" #", 1)
+        line = key_part.strip()
+        comment = comment_part.strip()
+    if not line:
+        return None
+    return line, comment
+
+
+def _read_key_file_lines(path: Path) -> list[str] | None:
     try:
         text = path.read_text(encoding="utf-8-sig")
     except FileNotFoundError:
-        return []
+        return None
     except (OSError, UnicodeError) as exc:
         raise LLMError(f"не удалось прочитать файл ключей {path}: {exc}") from exc
+    return text.splitlines()
 
+
+def _write_key_file_lines(path: Path, lines: list[str]) -> None:
+    text = ("\n".join(lines) + "\n") if lines else ""
+    atomic_write_text(path, text)
+    if os.name != "nt":
+        with contextlib.suppress(OSError):
+            os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)
+
+
+def read_api_keys(path: Path) -> list[str]:
+    """Прочитать ключи из файла: по одному на строку, `#` — комментарий."""
+    lines = _read_key_file_lines(path)
+    if lines is None:
+        return []
     keys: list[str] = []
-    for raw in text.splitlines():
-        line = raw.strip()
-        if not line or line.startswith("#"):
-            continue
-        if " #" in line:
-            line = line.split(" #", 1)[0].strip()
-        if line:
-            keys.append(line)
+    for raw in lines:
+        parsed = _parse_key_line(raw)
+        if parsed is not None:
+            keys.append(parsed[0])
     return keys
+
+
+def add_api_key(path: Path, key: str, *, comment: str = "") -> tuple[bool, str, int]:
+    """Добавить API-ключ в файл без дублей и с правами 0600."""
+    cleaned = key.strip()
+    if not cleaned:
+        raise UsageAppError("API-ключ не может быть пустым.")
+    if any(ch.isspace() for ch in cleaned):
+        raise UsageAppError("API-ключ не должен содержать пробелы или переносы строк.")
+    if cleaned.startswith("#"):
+        raise UsageAppError("API-ключ не может начинаться с символа '#'.")
+
+    clean_comment = " ".join(comment.split())
+    existing_lines = _read_key_file_lines(path)
+    existing_keys = [
+        parsed[0]
+        for raw in (existing_lines or [])
+        if (parsed := _parse_key_line(raw)) is not None
+    ]
+    if cleaned in existing_keys:
+        return False, mask_key(cleaned), len(existing_keys)
+
+    new_line = f"{cleaned} # {clean_comment}" if clean_comment else cleaned
+    if existing_lines is None:
+        new_lines = [KEYS_FILE_HEADER, new_line]
+    else:
+        new_lines = [*existing_lines, new_line]
+    _write_key_file_lines(path, new_lines)
+    return True, mask_key(cleaned), len(existing_keys) + 1
+
+
+def remove_api_key(path: Path, index: int) -> tuple[str, int]:
+    """Удалить ключ из файла по 1-based индексу, сохраняя комментарии."""
+    existing_lines = _read_key_file_lines(path)
+    if existing_lines is None:
+        raise UsageAppError(f"Файл ключей не найден: {path}")
+
+    kept_lines: list[str] = []
+    total_keys = 0
+    removed_key: str | None = None
+    for raw in existing_lines:
+        parsed = _parse_key_line(raw)
+        if parsed is None:
+            kept_lines.append(raw)
+            continue
+        total_keys += 1
+        if total_keys == index:
+            removed_key = parsed[0]
+        else:
+            kept_lines.append(raw)
+
+    if total_keys == 0:
+        raise UsageAppError(f"В файле ключей нет ни одного ключа: {path}")
+    if index < 1 or index > total_keys or removed_key is None:
+        raise UsageAppError(f"Некорректный номер ключа: {index} (доступно: 1..{total_keys}).")
+
+    _write_key_file_lines(path, kept_lines)
+    return mask_key(removed_key), total_keys - 1
+
+
+def clear_api_keys(path: Path) -> tuple[bool, int]:
+    """Удалить файл с ключами и вернуть количество удалённых ключей."""
+    if not path.exists():
+        return False, 0
+    count = len(read_api_keys(path))
+    path.unlink(missing_ok=True)
+    return True, count
+
+
+def list_key_entries(
+    config: Config,
+    root: Path | None = None,
+) -> tuple[list[StoredKeyEntry], Path | None, str, int]:
+    """Собрать маскированный список ключей из файла и переменной окружения."""
+    entries: list[StoredKeyEntry] = []
+    raw_keys: list[str] = []
+
+    key_file = resolve_api_key_file(config.llm.api_key_file, root)
+    if key_file is not None:
+        lines = _read_key_file_lines(key_file)
+        if lines is not None:
+            file_index = 0
+            for raw in lines:
+                parsed = _parse_key_line(raw)
+                if parsed is None:
+                    continue
+                file_index += 1
+                raw_key, comment = parsed
+                raw_keys.append(raw_key)
+                entries.append(
+                    StoredKeyEntry(
+                        index=file_index,
+                        masked=mask_key(raw_key),
+                        comment=comment,
+                        source="file",
+                    )
+                )
+
+    env_name = config.llm.api_key_env.strip()
+    if env_name:
+        env_value = os.environ.get(env_name, "")
+        if env_value:
+            for part in env_value.replace(",", " ").split():
+                cleaned = part.strip()
+                if not cleaned:
+                    continue
+                raw_keys.append(cleaned)
+                entries.append(
+                    StoredKeyEntry(
+                        index=None,
+                        masked=mask_key(cleaned),
+                        comment="",
+                        source="env",
+                    )
+                )
+
+    total_unique = len(dict.fromkeys(k.strip() for k in raw_keys if k.strip()))
+    return entries, key_file, env_name, total_unique
 
 
 def load_api_keys(config: Config, root: Path | None = None) -> list[str]:

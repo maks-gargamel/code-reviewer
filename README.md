@@ -22,7 +22,7 @@
   - `map deps / files / outline / cycles / search / export` (включая Graphviz DOT).
   - `demo` — полный прогон пайплайна на записанном ответе без сети, ключа API и даже без `git`.
   - `eval` — измерение `precision / recall / F1` на 22 тестовых кейсах (Python, JS, Go).
-  - `history`, `cache`, `install-hook` (`pre-commit`), `config`, `doctor`.
+  - `history`, `cache`, `install-hook` (`pre-commit`), `keys`, `config`, `doctor`.
 
 ## Установка
 
@@ -108,7 +108,17 @@ code-reviewer check --range HEAD~3..HEAD --format sarif --output review.sarif
 При первом `code-reviewer init` (или `code-reviewer config init`) создаётся `.code-reviewer/config.toml`. Поддерживается любой OpenAI-совместимый API: Gemini, OpenAI, DeepSeek, Groq, OpenRouter, Ollama, LM Studio.
 
 Ключи можно задать:
-- в файле `.code-reviewer/keys.txt` (по одному ключу на строку, `#` — комментарий; директория `.code-reviewer/` автоматически добавляется в `.gitignore`);
+- через CLI-команду `keys` (сохраняет их в `.code-reviewer/keys.txt` с правами `0600` и автоматически добавляет `.code-reviewer/` в `.gitignore`):
+
+```bash
+code-reviewer keys add                     # интерактивный скрытый ввод (рекомендуется)
+code-reviewer keys add -c "gemini"         # с комментарием к ключу
+code-reviewer keys list                    # посмотреть добавленные ключи (в маске)
+code-reviewer keys remove 1                # удалить ключ по номеру из list
+code-reviewer keys clear                   # удалить файл ключей целиком
+```
+
+- вручную в файле `.code-reviewer/keys.txt` (по одному ключу на строку, `#` — комментарий);
 - через переменную окружения `CODE_REVIEWER_API_KEY` (можно несколько через запятую или пробел).
 
 При `401`, `403`, `429` или серии `5xx` потокобезопасный пул ключей автоматически переключается на следующий рабочий ключ. Для локальных провайдеров (`provider = "ollama"` или `base_url` на `localhost`/`127.0.0.1`) API-ключ не требуется.

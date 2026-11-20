@@ -33,7 +33,7 @@ src/code_reviewer/
 ├── review/               # маскирование секретов, чанкинг, контекст, промпт, разбор находок, ignore, история, пайплайн
 ├── workflows/            # офлайн-демо, eval-стенд, диагностика окружения (doctor)
 ├── render/               # вывод в Rich-консоль, JSON, Markdown, SARIF 2.1.0
-└── cli/                  # тонкий слой Typer-команд (init, status, check, map, eval, demo, config, doctor, ...)
+└── cli/                  # тонкий слой Typer-команд (init, status, check, map, keys, eval, demo, config, doctor, ...)
 tests/                    # автотесты pytest
 evals/                    # JSON-кейсы для оценки precision / recall / F1
 docs/                     # справочник CLI и дополнительная документация

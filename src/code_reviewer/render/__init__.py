@@ -28,12 +28,14 @@ from .sarif import findings_sarif
 from .views import (
     eval_json,
     history_json,
+    keys_json,
     print_cache,
     print_config,
     print_demo,
     print_doctor,
     print_eval,
     print_history,
+    print_keys,
 )
 
 __all__ = [
@@ -47,6 +49,7 @@ __all__ = [
     "history_json",
     "human_duration",
     "human_size",
+    "keys_json",
     "print_cache",
     "print_config",
     "print_cycles",
@@ -59,6 +62,7 @@ __all__ = [
     "print_findings",
     "print_history",
     "print_init_summary",
+    "print_keys",
     "print_no_changes",
     "print_outline",
     "print_search",
