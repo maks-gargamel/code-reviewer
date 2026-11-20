@@ -12,7 +12,7 @@ from typing import Any
 
 from .fs import atomic_write_text
 
-MAP_VERSION = 1
+MAP_VERSION = 2
 TOOL_NAME = "code-reviewer"
 
 

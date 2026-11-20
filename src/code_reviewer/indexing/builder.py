@@ -149,7 +149,7 @@ def build_map(
     stats.files_removed = len(set(previous_files) - set(files))
 
     source_roots = detect_source_roots(files)
-    edges = resolve_edges(files, source_roots)
+    edges = resolve_edges(files, source_roots, root=root)
 
     stats.symbols = sum(len(info.symbols) for info in files.values())
     stats.parse_errors = sum(len(info.parse_errors) for info in files.values())

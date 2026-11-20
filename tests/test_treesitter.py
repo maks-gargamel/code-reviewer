@@ -112,7 +112,7 @@ def test_commonjs_ast_ignores_comments_and_strings():
 
 
 def test_non_js_does_not_trigger_commonjs_extraction(monkeypatch):
-    # Регрессионный тест: require() в не-JS файлах не должен парситься как CommonJS.
+    # Регрессионный тест: JS-парсер require() не должен вызываться для не-JS языков (например Java).
     import tree_sitter_language_pack as pack
 
     called = False
@@ -127,7 +127,7 @@ def test_non_js_does_not_trigger_commonjs_extraction(monkeypatch):
     def fail_get_parser(lang):
         nonlocal called
         called = True
-        raise AssertionError("get_parser не должен вызываться для не-JS")
+        raise AssertionError("get_parser не должен вызываться для JS AST на Java")
 
     monkeypatch.setattr(
         "code_reviewer.indexing.parsers.treesitter.ensure_grammar",
@@ -137,9 +137,9 @@ def test_non_js_does_not_trigger_commonjs_extraction(monkeypatch):
     monkeypatch.setattr(pack, "get_parser", fail_get_parser)
 
     info = TreeSitterAdapter().extract(
-        "app.rb",
-        'require("./not_js")\n',
-        size=20,
+        "App.java",
+        'class App { void f() { require("./not_js"); } }\n',
+        size=48,
         mtime=1.0,
         digest="d",
     )

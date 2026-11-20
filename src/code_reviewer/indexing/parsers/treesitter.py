@@ -9,6 +9,7 @@ from typing import Any
 from ...core.models import FileInfo, ImportRef, Symbol, SymbolKind
 from .base import LanguageAdapter, ParseOptions, collapse, leading_comment
 from .plain import PlainAdapter
+from .ts_ast import augment_ast, relative_level, strip_relative
 
 MAX_DOC = 240
 MAX_SIGNATURE = 300
@@ -27,13 +28,14 @@ LANGUAGE_BY_EXTENSION: dict[str, str] = {
     ".java": "java",
     ".kt": "kotlin",
     ".kts": "kotlin",
-    ".cs": "c_sharp",
+    ".cs": "csharp",
     ".rb": "ruby",
     ".php": "php",
     ".c": "c",
     ".h": "c",
     ".cc": "cpp",
     ".cpp": "cpp",
+    ".cxx": "cpp",
     ".hpp": "cpp",
     ".hh": "cpp",
     ".scala": "scala",
@@ -43,7 +45,6 @@ LANGUAGE_BY_EXTENSION: dict[str, str] = {
 }
 
 DISPLAY_LANGUAGE: dict[str, str] = {
-    "c_sharp": "csharp",
     "tsx": "tsx",
 }
 
@@ -79,9 +80,6 @@ PATH_SUFFIXES = (
     ".vue",
     ".svelte",
 )
-
-JS_LANGUAGES = frozenset({"javascript", "typescript", "tsx"})
-_JS_FUNC_VALUE_NODES = frozenset({"arrow_function", "function_expression", "function"})
 
 _FROM_RE = re.compile(r"""\bfrom\s+['"]([^'"]+)['"]""")
 _REQUIRE_RE = re.compile(r"""\brequire\s*\(\s*['"]([^'"]+)['"]\s*\)""")
@@ -222,8 +220,7 @@ class TreeSitterAdapter(LanguageAdapter):
         )
         _walk(result.structure, None, info.symbols)
         info.imports = _convert_imports(result)
-        if language in JS_LANGUAGES:
-            _augment_js_ast(source, language, pack, info.symbols, info.imports)
+        augment_ast(source, language, pack, info.symbols, info.imports)
         return info
 
 
@@ -255,213 +252,6 @@ def _walk(items: Any, parent: str | None, out: list[Symbol]) -> None:
         _walk(item.children, name or parent, out)
 
 
-def _augment_js_ast(
-    source: str,
-    language: str,
-    pack: Any,
-    symbols: list[Symbol],
-    imports: list[ImportRef],
-) -> None:
-    """Извлечь CommonJS `require(...)` и функциональные присваивания через реальный AST."""
-    try:
-        parser = pack.get_parser(language)
-        source_bytes = source.encode("utf-8")
-        tree = parser.parse(source_bytes)
-    except Exception:  # noqa: BLE001
-        symbols[:] = [s for s in symbols if s.name != "<anonymous>"]
-        return
-
-    by_line: dict[int, Symbol] = {}
-    for sym in symbols:
-        by_line.setdefault(sym.line, sym)
-
-    seen_imports: set[tuple[int, str]] = {
-        (ref.line, ref.dotted) for ref in imports
-    }
-
-    stack = [tree.root_node]
-    while stack:
-        node = stack.pop()
-        node_type = node.type
-
-        if node_type == "call_expression":
-            _maybe_add_commonjs_require(node, source_bytes, imports, seen_imports)
-        elif node_type == "variable_declarator":
-            _maybe_add_js_var_func(node, source_bytes, symbols, by_line)
-        elif node_type == "assignment_expression":
-            _maybe_add_js_prop_func(node, source_bytes, symbols, by_line)
-
-        for child in reversed(node.children):
-            stack.append(child)
-
-    symbols[:] = [s for s in symbols if s.name != "<anonymous>"]
-    imports.sort(key=lambda ref: ref.line)
-
-
-def _node_text(node: Any, source_bytes: bytes) -> str:
-    return source_bytes[node.start_byte : node.end_byte].decode("utf-8", errors="replace")
-
-
-def _extract_js_string(node: Any, source_bytes: bytes) -> str | None:
-    if node.type != "string":
-        return None
-    raw = _node_text(node, source_bytes).strip()
-    if len(raw) >= 2 and raw[0] in ("'", '"') and raw[-1] == raw[0]:
-        return raw[1:-1].strip()
-    return None
-
-
-def _signature_prefix(node: Any, source_bytes: bytes) -> str:
-    text = _node_text(node, source_bytes)
-    head = text.split("{", 1)[0].strip()
-    return collapse(head, MAX_SIGNATURE) or ""
-
-
-def _maybe_add_commonjs_require(
-    node: Any,
-    source_bytes: bytes,
-    imports: list[ImportRef],
-    seen: set[tuple[int, str]],
-) -> None:
-    func = node.child_by_field_name("function")
-    args = node.child_by_field_name("arguments")
-    if func is None or args is None or func.type != "identifier":
-        return
-    if _node_text(func, source_bytes) != "require":
-        return
-    named_args = args.named_children
-    if len(named_args) != 1:
-        return
-    module = _extract_js_string(named_args[0], source_bytes)
-    if not module:
-        return
-
-    line = node.start_point.row + 1
-    level = _relative_level(module)
-    relative = _strip_relative(module) if level else module
-    dotted = "." * level + relative
-    if (line, dotted) in seen:
-        return
-    seen.add((line, dotted))
-    imports.append(
-        ImportRef(
-            raw=collapse(_node_text(node, source_bytes), 200) or module,
-            line=line,
-            module=relative,
-            names=[],
-            level=level,
-            is_from=False,
-        )
-    )
-
-
-def _record_js_symbol(
-    *,
-    name: str,
-    parent: str | None,
-    line: int,
-    end_line: int,
-    signature: str,
-    symbols: list[Symbol],
-    by_line: dict[int, Symbol],
-) -> None:
-    kind = SymbolKind.METHOD if parent else SymbolKind.FUNCTION
-    existing = by_line.get(line)
-    if existing is not None:
-        if existing.name == "<anonymous>":
-            existing.name = name
-            existing.parent = parent
-            existing.kind = kind
-            if not existing.signature or existing.signature == "<anonymous>":
-                existing.signature = signature
-        return
-
-    symbol = Symbol(
-        name=name,
-        kind=kind,
-        line=line,
-        end_line=end_line,
-        signature=signature,
-        parent=parent,
-    )
-    symbols.append(symbol)
-    by_line[line] = symbol
-
-
-def _maybe_add_js_var_func(
-    node: Any,
-    source_bytes: bytes,
-    symbols: list[Symbol],
-    by_line: dict[int, Symbol],
-) -> None:
-    name_node = node.child_by_field_name("name")
-    val_node = node.child_by_field_name("value")
-    if name_node is None or val_node is None:
-        return
-    if name_node.type != "identifier" or val_node.type not in _JS_FUNC_VALUE_NODES:
-        return
-    name = _node_text(name_node, source_bytes).strip()
-    if not name:
-        return
-    _record_js_symbol(
-        name=name,
-        parent=None,
-        line=node.start_point.row + 1,
-        end_line=node.end_point.row + 1,
-        signature=_signature_prefix(node, source_bytes),
-        symbols=symbols,
-        by_line=by_line,
-    )
-
-
-def _maybe_add_js_prop_func(
-    node: Any,
-    source_bytes: bytes,
-    symbols: list[Symbol],
-    by_line: dict[int, Symbol],
-) -> None:
-    left = node.child_by_field_name("left")
-    right = node.child_by_field_name("right")
-    if left is None or right is None:
-        return
-    if left.type != "member_expression" or right.type not in _JS_FUNC_VALUE_NODES:
-        return
-    prop_text = _node_text(left, source_bytes).strip()
-    parent, _, name = prop_text.rpartition(".")
-    if not parent or not name or (parent == "module" and name == "exports"):
-        return
-    _record_js_symbol(
-        name=name,
-        parent=parent,
-        line=node.start_point.row + 1,
-        end_line=node.end_point.row + 1,
-        signature=_signature_prefix(node, source_bytes),
-        symbols=symbols,
-        by_line=by_line,
-    )
-
-
-def _relative_level(module: str) -> int:
-    if module == "." or module.startswith("./"):
-        return 1
-    depth = 0
-    rest = module
-    while rest.startswith("../"):
-        depth += 1
-        rest = rest[3:]
-    if rest == "..":
-        depth += 1
-    return depth + 1 if depth else 0
-
-
-def _strip_relative(module: str) -> str:
-    while module.startswith("./"):
-        module = module[2:]
-    while module.startswith("../"):
-        module = module[3:]
-    return "" if module in (".", "..") else module
-
-
 def _convert_imports(result: Any) -> list[ImportRef]:
     refs: list[ImportRef] = []
     for item in result.imports:
@@ -469,8 +259,8 @@ def _convert_imports(result: Any) -> list[ImportRef]:
         module = _module_of(raw)
         if not module:
             continue
-        level = _relative_level(module)
-        relative = _strip_relative(module) if level else module
+        level = relative_level(module)
+        relative = strip_relative(module) if level else module
         if not relative and not level:
             continue
         span = getattr(item, "span", None)
@@ -537,10 +327,13 @@ def resolve_relative_file(
     level: int,
     module: str,
     known: set[str],
+    *,
+    suffixes: tuple[str, ...] = PATH_SUFFIXES,
+    index_stem: str = "index",
 ) -> str | None:
     """Разрешить относительный импорт `./x` или `../x` в конкретный файл репозитория."""
     if not module:
-        module = "index"
+        module = index_stem
     base = path.split("/")[:-1]
     drop = level - 1
     if drop > len(base):
@@ -554,10 +347,15 @@ def resolve_relative_file(
     stem, extension = posixpath.splitext(candidate)
     variants = [candidate]
     if not extension:
-        variants.extend(candidate + suffix for suffix in PATH_SUFFIXES)
-        variants.extend(posixpath.join(candidate, "index" + suffix) for suffix in PATH_SUFFIXES)
+        variants.extend(candidate + suffix for suffix in suffixes)
+        if index_stem:
+            variants.extend(
+                posixpath.join(candidate, f"{index_stem}{suffix}") for suffix in suffixes
+            )
+    elif extension in suffixes:
+        variants.extend(stem + suffix for suffix in suffixes)
     else:
-        variants.extend(stem + suffix for suffix in PATH_SUFFIXES)
+        variants.extend(candidate + suffix for suffix in suffixes)
 
     for variant in variants:
         if variant in known:
