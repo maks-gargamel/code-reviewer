@@ -6,9 +6,16 @@
 
 `code-reviewer` выполняет анализ изменений (git diff) в контексте всего репозитория по двухпроходной схеме:
 
-1. **`init` (локально, без вызовов LLM):** обход файлов с учётом `.gitignore`, извлечение символов, сигнатур, docstrings/комментариев и импортов (Python через stdlib `ast`, остальные языки через опциональный `tree-sitter-language-pack`, прочее как Tier D узлы), разрешение импортов в граф зависимостей и сохранение карты в `.code-reviewer/map.json`.
+1. **`init` (локально, без вызовов LLM):** обход файлов с учётом `.gitignore`, извлечение символов, сигнатур, docstrings/комментариев и импортов (Python через stdlib `ast`, остальные 16 языков Tier B через опциональный `tree-sitter-language-pack` + `ts_ast.py`, прочее как Tier D узлы), разрешение импортов в граф зависимостей (`MAP_VERSION = 2`) и сохранение карты в `.code-reviewer/map.json`. Если в git уже есть коммиты и `last_reviewed_commit` пуст — фиксирует первый `HEAD`.
    - Опциональный режим `init --ai-summary` генерирует краткие описания модулей по их сигнатурам и docstring, кэшируя их в `.code-reviewer/summary-cache/`. Без этого флага `init` никогда не обращается к LLM.
-2. **`check` (ревью diff через LLM):** сбор diff (`auto`, `staged`, `unstaged`, `--last`, `--since-last`, `--commit`, `--range`), маскирование секретов, разбиение на чанки по связным компонентам графа зависимостей, сбор контекста из карты (сигнатуры и сводки связанных файлов), вызов OpenAI-совместимого API, разбор JSON-ответа, фильтрация галлюцинаций и ignore-директив, вывод отчёта (`table` / `json` / `md` / `sarif`) и запись в историю.
+2. **`check` (ревью diff через LLM):** сбор diff (`auto`, `staged`, `unstaged`, `--last`, `--since-last`, `--commit`, `--range`, а также `--all` по всей карте с `-p/--path`, `--no-tests` и защитой квоты), маскирование секретов, разбиение на чанки по связным компонентам графа зависимостей, сбор контекста из карты, вызов OpenAI-совместимого API, разбор JSON-ответа, фильтрация галлюцинаций и ignore-директив, вывод отчёта (`table` / `json` / `md` / `sarif`) и запись в историю.
+
+## Документация для старта нового чата
+
+- [`STATUS.md`](STATUS.md) — актуальный статус проекта, результаты тестов и живых проверок, локальное окружение, открытый бэклог.
+- [`SPEC.md`](SPEC.md) — полная функциональная и техническая спецификация (`init`, `check`, `--all`, `keys`, `map`, языки, безопасность, дистрибуция).
+- [`ARCHITECTURE.md`](ARCHITECTURE.md) — слои, потоки данных и форматы `.code-reviewer/`.
+- [`docs/CLI.md`](docs/CLI.md) — справочник по командам и флагам CLI.
 
 ## Технологический стек
 
@@ -28,9 +35,9 @@ src/code_reviewer/
 ├── __main__.py           # запуск через python -m code_reviewer
 ├── core/                 # базовые модели, конфиг, ошибки, glob-матчинг, атомарное хранилище
 ├── vcs/                  # обёртка над git CLI, сбор/разбор diff, git pre-commit хук
-├── indexing/             # discovery файлов, парсеры (python_ast, treesitter, plain), граф, сборка карты, AI-сводки
-├── llm/                  # протокол клиента, потокобезопасный пул ключей, OpenAI-совместимый HTTP-клиент
-├── review/               # маскирование секретов, чанкинг, контекст, промпт, разбор находок, ignore, история, пайплайн
+├── indexing/             # discovery, парсеры (python_ast, treesitter, ts_ast, plain), resolver, граф, builder, AI-сводки
+├── llm/                  # протокол клиента, потокобезопасный пул ключей (keys.txt), OpenAI-совместимый HTTP-клиент
+├── review/               # маскирование секретов, scan (--all), чанкинг, контекст, промпт, разбор находок, ignore, история, пайплайн
 ├── workflows/            # офлайн-демо, eval-стенд, диагностика окружения (doctor)
 ├── render/               # вывод в Rich-консоль, JSON, Markdown, SARIF 2.1.0
 └── cli/                  # тонкий слой Typer-команд (init, status, check, map, keys, eval, demo, config, doctor, ...)
@@ -63,11 +70,12 @@ docs/                     # справочник CLI и дополнительн
 ## Команды разработки и проверки
 
 ```bash
-uv sync --all-extras              # установка зависимостей и dev/treesitter extras
-uv run pytest                     # запуск всех тестов
-uv run ruff check src tests       # линтинг
-uv run mypy src                   # проверка типов
-uv run code-reviewer demo         # проверка пайплайна без сети и API-ключа
+export PATH="$HOME/.local/bin:$PATH"   # uv установлен в ~/.local/bin
+uv sync --all-extras                  # установка зависимостей и dev/treesitter/build extras
+uv run pytest                         # запуск всех тестов
+uv run ruff check src tests scripts   # линтинг
+uv run mypy src                       # проверка типов
+uv run code-reviewer demo             # проверка пайплайна без сети и API-ключа
 ```
 
 ## Языковые соглашения
