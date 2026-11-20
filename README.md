@@ -13,7 +13,7 @@
   - Разрешение импортов в граф зависимостей (`internal`, `external`, `unresolved`) для flat- и `src`-layout, плюс локальные `#include` в C/C++.
   - Инкрементальное обновление по размеру и `mtime`, опциональные AI-сводки по модулям (`init --ai-summary`).
 - **Умное ревью (`check`):**
-  - Режимы: staged / working tree + untracked (по умолчанию), `--last`, `--since-last`, `--commit`, `--range`.
+  - Режимы: staged / working tree + untracked (по умолчанию), `--last`, `--since-last`, `--commit`, `--range`, а также полный аудит всего кода `--all` (`-p/--path`, `--no-tests`, `--dry-run`, защита квоты).
   - Автоматическое маскирование секретов перед отправкой в облако.
   - Чанкинг больших diff по связным компонентам графа зависимостей и параллельная проверка (`--jobs`).
   - Отчёты в `table`, `json`, `md`, `sarif` (2.1.0 для CI), коды возврата `0`/`1`/`2`.
@@ -95,9 +95,11 @@ code-reviewer map export --output graph.dot
 
 # 4. Проверить промпт и оценку токенов без обращения к модели
 code-reviewer check --dry-run
+code-reviewer check --all --dry-run        # план и стоимость сканирования всего репозитория
 
 # 5. Запустить ревью
 code-reviewer check
+code-reviewer check --all --no-tests -p src/
 code-reviewer check --range HEAD~3..HEAD --format sarif --output review.sarif
 ```
 

@@ -82,6 +82,10 @@ def init_command(
 
     sf = state_path(root)
     state = State.load(sf)
+    checkpoint_set = False
+    if head and not state.last_reviewed_commit:
+        state.last_reviewed_commit = head
+        checkpoint_set = True
     state.last_map_at = result.repo_map.generated_at
     state.last_map_head = head
     state.branch = git.current_branch(root)
@@ -95,6 +99,11 @@ def init_command(
         config_file=config_file,
         gitignore_note=note,
     )
+    if checkpoint_set and head is not None:
+        console.print(
+            f"[dim]Точка отсчёта для --since-last: {_s(head[:10])} "
+            "(полный аудит: code-reviewer check --all --dry-run)[/dim]"
+        )
 
     if summary_result is not None:
         if summary_result.errors:

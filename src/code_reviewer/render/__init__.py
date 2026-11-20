@@ -22,6 +22,7 @@ from .report import (
     print_dry_run,
     print_findings,
     print_no_changes,
+    print_scan_plan,
     print_verify,
 )
 from .sarif import findings_sarif
@@ -65,6 +66,7 @@ __all__ = [
     "print_keys",
     "print_no_changes",
     "print_outline",
+    "print_scan_plan",
     "print_search",
     "print_status",
     "print_verify",

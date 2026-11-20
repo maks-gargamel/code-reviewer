@@ -19,14 +19,15 @@ code-reviewer init [--root DIR] [--rebuild] [--ai-summary] [--summary-limit N] [
 code-reviewer status [--root DIR] [--json]
 ```
 
-- `init` строит или инкрементально обновляет `.code-reviewer/map.json` и добавляет `.code-reviewer/` в `.gitignore`. Без `--ai-summary` модель не вызывается.
+- `init` строит или инкрементально обновляет `.code-reviewer/map.json`, добавляет `.code-reviewer/` в `.gitignore` и при наличии коммитов автоматически фиксирует первый `HEAD` как точку отсчёта для `--since-last`. Без `--ai-summary` модель не вызывается.
 - `status` показывает текущую ветку, `HEAD`, статистику карты, список устаревших файлов и время последнего ревью.
 
 ### `check` и `mark-reviewed`
 
 ```bash
 code-reviewer check [--root DIR]
-                    [--last | --since-last | --commit REF | --range A..B]
+                    [--all [-p|--path PATH]... [--no-tests] [-y|--yes]
+                     | --last | --since-last | --commit REF | --range A..B]
                     [--dry-run] [--format table|json|md|sarif] [--output FILE] [--json]
                     [--no-cache] [--no-ignore] [--baseline | --save-baseline] [--verify]
                     [--max-files N] [--max-chunks N] [--jobs N] [--quiet]
@@ -34,7 +35,8 @@ code-reviewer mark-reviewed [--root DIR]
 ```
 
 - Без указания области проверки берутся staged-изменения (если они есть), иначе working tree + новые (untracked) файлы.
-- `--dry-run` показывает собранные system/user промпты и оценку токенов без сетевых вызовов.
+- `--all` сканирует весь репозиторий по карте (пропуская документацию/конфиги без явного `-p`), с `--dry-run` заранее показывает таблицу чанков, попадания в кэш и число запросов к API, а при `> 10` некэшированных запросах к удалённому API требует подтверждения (или `-y` / `--max-chunks`).
+- `--dry-run` показывает собранные system/user промпты (или план `--all`) и оценку токенов без сетевых вызовов.
 - `--quiet` подавляет служебный вывод и выводит результат только при наличии замечаний (удобно для pre-commit хука).
 - `mark-reviewed` фиксирует текущий `HEAD` как `last_reviewed_commit` без обращения к модели.
 

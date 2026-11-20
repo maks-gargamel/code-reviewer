@@ -31,6 +31,15 @@ from .ignore import (
 )
 from .pipeline import ReviewResult, VerifySummary, compute_verify, run_review
 from .prompt import MAX_DIFF_CHARS, PromptBundle, build_prompt, estimate_tokens
+from .scan import (
+    NON_CODE_LANGS,
+    SCAN_CONFIRM_THRESHOLD,
+    ScanChunkPreview,
+    ScanEstimate,
+    collect_repo_diffset,
+    estimate_scan,
+    is_test_file,
+)
 from .secrets import PLACEHOLDER, redact
 
 __all__ = [
@@ -40,24 +49,31 @@ __all__ = [
     "IgnoreRules",
     "MAX_DIFF_CHARS",
     "Metrics",
+    "NON_CODE_LANGS",
     "PLACEHOLDER",
     "PromptBundle",
     "ReviewContext",
     "ReviewResult",
+    "SCAN_CONFIRM_THRESHOLD",
+    "ScanChunkPreview",
+    "ScanEstimate",
     "VerifySummary",
     "append_entry",
     "build_context",
     "build_prompt",
     "collect_inline_ignores",
+    "collect_repo_diffset",
     "compute_metrics",
     "compute_verify",
     "dedupe",
     "directive_kind",
+    "estimate_scan",
     "estimate_tokens",
     "file_tokens",
     "filter_findings",
     "filter_to_paths",
     "history_path",
+    "is_test_file",
     "load_history",
     "normalize_path",
     "parse_findings",

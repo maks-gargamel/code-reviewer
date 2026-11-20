@@ -11,6 +11,7 @@ from rich.table import Table
 from ..core.models import Finding
 from ..review.pipeline import ReviewResult, VerifySummary
 from ..review.prompt import PromptBundle, estimate_tokens
+from ..review.scan import SCAN_CONFIRM_THRESHOLD, ScanEstimate
 from .console import _s, console, human_duration
 
 SEVERITY_STYLE = {"error": "bold red", "warning": "yellow", "info": "cyan"}
@@ -100,6 +101,63 @@ def print_dry_run(prompts: list[PromptBundle], *, scope: str, files: int) -> Non
 def print_no_changes(scope: str) -> None:
     console.print()
     console.print(f"[dim]Нет изменений для ревью ({_s(scope)}).[/dim]")
+    console.print()
+
+
+def print_scan_plan(estimate: ScanEstimate) -> None:
+    """Показать план и оценку запросов полного сканирования (`check --all --dry-run`)."""
+    console.print()
+    console.print(f"[bold]План полного сканирования (--dry-run)[/bold] · {_s(estimate.scope)}")
+
+    if estimate.chunks:
+        table = Table(header_style="bold")
+        table.add_column("#", justify="right", no_wrap=True)
+        table.add_column("Файлы", overflow="fold")
+        table.add_column("Токены", justify="right", no_wrap=True)
+        table.add_column("Статус", no_wrap=True)
+
+        for chunk in estimate.chunks:
+            preview = ", ".join(chunk.files[:3])
+            if len(chunk.files) > 3:
+                preview += f" … +{len(chunk.files) - 3}"
+            status_label = (
+                "[green]из кэша[/green]"
+                if chunk.cached
+                else "[yellow]запрос к API[/yellow]"
+            )
+            table.add_row(str(chunk.index), _s(preview), f"~{chunk.tokens}", status_label)
+
+        console.print()
+        console.print(table)
+
+    console.print(
+        f"[bold]Итого:[/bold] файлов {estimate.files_total} · "
+        f"чанков {len(estimate.chunks)} · ~{estimate.total_tokens} токенов"
+    )
+    if estimate.is_local:
+        console.print(
+            f"Новых запросов к локальной модели: [bold]{estimate.uncached_requests}[/bold] "
+            f"(в кэше: {estimate.cached_chunks})"
+        )
+    else:
+        console.print(
+            f"Новых запросов к API: [bold]{estimate.uncached_requests}[/bold] "
+            f"(в кэше: {estimate.cached_chunks}) · ключей в пуле: {estimate.keys_available}"
+        )
+    if estimate.omitted:
+        console.print(
+            f"[yellow]Не вошло в лимит: {len(estimate.omitted)} файлов "
+            "(--max-files / --max-chunks)[/yellow]"
+        )
+    if estimate.truncated:
+        console.print(
+            f"[yellow]Обрезано по лимиту строк: {len(estimate.truncated)} файлов[/yellow]"
+        )
+    if not estimate.is_local and estimate.uncached_requests > SCAN_CONFIRM_THRESHOLD:
+        console.print(
+            "[dim]Совет: уменьшите расход квоты через --max-chunks N, --no-tests, "
+            "--path DIR или добавьте ключи (keys add).[/dim]"
+        )
     console.print()
 
 

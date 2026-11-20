@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 from typing import Annotated
 
@@ -26,20 +27,50 @@ from ..render.report import (
     print_dry_run,
     print_findings,
     print_no_changes,
+    print_scan_plan,
     print_verify,
 )
 from ..render.sarif import findings_sarif
 from ..review.findings import worst_rank
 from ..review.history import append_entry
 from ..review.pipeline import compute_verify, run_review
+from ..review.scan import SCAN_CONFIRM_THRESHOLD, collect_repo_diffset, estimate_scan
 from ..vcs import git
-from ..vcs.diff import DiffScope
+from ..vcs.diff import DiffScope, DiffSet
 from .common import RootOption, cli_command, refresh_map, require_map, resolve_root
+
+
+def _is_interactive() -> bool:
+    return sys.stdin.isatty()
 
 
 @cli_command
 def check_command(
     root_option: RootOption = None,
+    use_all: Annotated[
+        bool,
+        typer.Option("--all", help="Просканировать весь репозиторий целиком на наличие багов."),
+    ] = False,
+    paths: Annotated[
+        list[str] | None,
+        typer.Option(
+            "-p",
+            "--path",
+            help="Ограничить --all указанными файлами или папками (можно повторять).",
+        ),
+    ] = None,
+    no_tests: Annotated[
+        bool,
+        typer.Option("--no-tests", help="Пропустить тестовые файлы при --all."),
+    ] = False,
+    assume_yes: Annotated[
+        bool,
+        typer.Option(
+            "-y",
+            "--yes",
+            help="Не запрашивать подтверждение при большом числе запросов в --all.",
+        ),
+    ] = False,
     use_last: Annotated[bool, typer.Option("--last", help="Проверить последний коммит.")] = False,
     use_since_last: Annotated[
         bool,
@@ -107,10 +138,12 @@ def check_command(
     ] = False,
 ) -> None:
     """Проверить изменения через LLM с учётом карты репозитория."""
-    if sum([use_last, use_since_last, commit_hash is not None, range_ is not None]) > 1:
+    if sum([use_all, use_last, use_since_last, commit_hash is not None, range_ is not None]) > 1:
         raise UsageAppError(
-            "Выберите только один режим: --last, --since-last, --commit или --range"
+            "Выберите только один режим: --all, --last, --since-last, --commit или --range"
         )
+    if (paths or no_tests) and not use_all:
+        raise UsageAppError("--path и --no-tests используются только вместе с --all")
     if use_baseline and save_baseline_flag:
         raise UsageAppError("--baseline и --save-baseline несовместимы")
 
@@ -130,7 +163,63 @@ def check_command(
     scope = DiffScope.AUTO
     commit: str | None = None
     since_commit: str | None = None
-    if use_last:
+    all_diffset: DiffSet | None = None
+    effective_max_chunks = max_chunks
+
+    if use_all:
+        all_diffset = collect_repo_diffset(
+            root,
+            repo_map,
+            paths=paths or (),
+            include_tests=not no_tests,
+            use_ignore=not no_ignore,
+            max_files=max_files,
+        )
+        if all_diffset.is_empty():
+            if not quiet:
+                print_no_changes(all_diffset.scope)
+            return
+
+        effective_max_chunks = (
+            max_chunks if max_chunks is not None else max(1, len(all_diffset.files))
+        )
+        estimate = estimate_scan(
+            root,
+            config,
+            repo_map,
+            all_diffset,
+            max_chunks=effective_max_chunks,
+            use_cache=not no_cache,
+        )
+        if dry_run:
+            print_scan_plan(estimate)
+            return
+
+        if (
+            not config.is_local_llm()
+            and estimate.uncached_requests > SCAN_CONFIRM_THRESHOLD
+            and not assume_yes
+            and max_chunks is None
+        ):
+            if not quiet and _is_interactive():
+                console.print(
+                    f"[yellow]! Полное сканирование выполнит {estimate.uncached_requests} "
+                    f"запросов к API (в кэше: {estimate.cached_chunks}, "
+                    f"ключей в пуле: {estimate.keys_available}).[/yellow]"
+                )
+                if not typer.confirm("Продолжить полное сканирование?", default=False):
+                    console.print(
+                        "[dim]Отменено. Можно ограничить объём: "
+                        "--max-chunks N, --no-tests или --path DIR.[/dim]"
+                    )
+                    return
+            else:
+                raise UsageAppError(
+                    f"Полное сканирование потребует {estimate.uncached_requests} запросов к API "
+                    f"(порог подтверждения: {SCAN_CONFIRM_THRESHOLD}). Передайте --yes, "
+                    "ограничьте --max-chunks N или уточните --path / --no-tests."
+                )
+    elif use_last:
         scope = DiffScope.LAST
     elif use_since_last:
         if not state.last_reviewed_commit:
@@ -169,12 +258,13 @@ def check_command(
         commit=commit,
         range_=range_,
         since_commit=since_commit,
+        diffset=all_diffset,
         use_cache=not no_cache,
         use_ignore=not no_ignore,
         baseline_ids=baseline.ids if baseline is not None else None,
         dry_run=dry_run,
         max_files=max_files,
-        max_chunks=max_chunks,
+        max_chunks=effective_max_chunks,
         jobs=jobs or config.review.jobs,
         progress=_progress,
     )
@@ -272,11 +362,18 @@ def check_command(
 
     state.last_check_at = utc_now()
     state.branch = branch
-    if (
+    should_advance = (
         not failed
-        and head
-        and scope in (DiffScope.AUTO, DiffScope.STAGED, DiffScope.LAST, DiffScope.SINCE)
-    ):
+        and bool(head)
+        and (
+            (use_all and not result.omitted and not paths and not no_tests)
+            or (
+                not use_all
+                and scope in (DiffScope.AUTO, DiffScope.STAGED, DiffScope.LAST, DiffScope.SINCE)
+            )
+        )
+    )
+    if should_advance:
         state.last_reviewed_commit = head
     state.save(sf)
 
